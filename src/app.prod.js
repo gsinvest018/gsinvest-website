@@ -421,9 +421,13 @@ const HARDWARE_WEBGL = (() => {
       failIfMajorPerformanceCaveat: true
     });
     if (!gl) return false;
+    // Some browsers (e.g. headless Chrome) hand out SwiftShader without
+    // flagging the caveat, so also check the renderer name.
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
     const lose = gl.getExtension("WEBGL_lose_context");
     if (lose) lose.loseContext();
-    return true;
+    return !/swiftshader|llvmpipe|softpipe|software|microsoft basic render/i.test(renderer);
   } catch (e) {
     return false;
   }
