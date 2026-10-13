@@ -150,13 +150,15 @@
   /* <=1024px: the hero grid collapses to one column but the dodecahedron keeps
      its full-brightness right-of-center position — deepen the right side of the
      hero scrim so the gold title never competes gold-on-gold with the object. */
+  /* <=1024px: copy spans the full width, so darken top-down instead: heavy
+     behind the headline, lighter toward the bottom where the sand river runs. */
   @media (max-width: 1024px) {
     #bg-scrim {
       background:
-        linear-gradient(90deg,
-          rgba(7,7,7,0.94) 0%,
-          rgba(7,7,7,0.88) 45%,
-          rgba(7,7,7,0.74) 100%);
+        linear-gradient(180deg,
+          rgba(7,7,7,0.9) 0%,
+          rgba(7,7,7,0.72) 40%,
+          rgba(7,7,7,0.3) 100%);
     }
   }
 
@@ -1592,7 +1594,7 @@
 
   /* Phones and tablets: soften the 3D backdrop so it never competes with text. */
   @media (max-width: 1024px) {
-    #three-bg.three-on { opacity: 0.35; }
+    #three-bg.three-on { opacity: 0.85; }
   }
   @media (max-width: 540px) {
     .contact-info-block { padding: 28px 20px; }

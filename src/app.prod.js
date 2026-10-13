@@ -465,8 +465,9 @@ function loadThree() {
   return threePromise;
 }
 
-// True once THREE has loaded and the browser is idle again, so WebGL setup
-// never competes with first paint. Stays false when 3D is disabled (USE_3D).
+// True once THREE has loaded and the browser is idle again. Only the
+// philosophy pillars use Three.js, and they mount when that page is shown,
+// so the library is never part of the initial load.
 function useThreeReady() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -481,266 +482,326 @@ function useThreeReady() {
   }, []);
   return ready;
 }
-function ThreeHero({
-  goldColor = "#D4AF37",
-  rotationSpeed = 1,
-  particleDensity = 1,
+// True once the page has loaded and the browser is idle, so WebGL setup never
+// competes with first paint. Stays false when 3D is disabled (USE_3D).
+function useIdleReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!USE_3D) return;
+    let cancelled = false;
+    const start = () => whenIdle(() => {
+      if (!cancelled) setReady(true);
+    });
+    if (document.readyState === "complete") start();else window.addEventListener("load", start, {
+      once: true
+    });
+    return () => {
+      cancelled = true;
+      window.removeEventListener("load", start);
+    };
+  }, []);
+  return ready;
+}
+
+/* Gold-panning sand river ("從砂礫中淘金"), adapted from the portal-3d PoC.
+ * Plain WebGL with no library: each particle's position is a closed-form
+ * function of its random seed and time, evaluated in the vertex shader, so
+ * there is no per-frame simulation state on the CPU or GPU. Sand flows left
+ * to right along a winding band with sine turbulence; sparse gold grains get
+ * a soft additive halo in place of a bloom pass; the pointer parts the sand. */
+const SAND_VERT = `
+attribute vec4 a_seed;
+attribute float a_gold;
+uniform mat4 u_vp;
+uniform float u_time, u_flow, u_turb, u_riverY, u_scale, u_sandSize, u_goldSize, u_sandDim, u_goldGlow, u_camDist;
+uniform vec3 u_pointer;
+varying vec3 v_col;
+varying float v_gold;
+const float X0 = -13.0;
+const float X1 = 13.0;
+void main() {
+  float span = X1 - X0;
+  float speed = u_flow * (0.55 + 0.9 * a_seed.y);
+  float x = X0 + mod(a_seed.x * span + u_time * speed, span);
+  float t = u_time;
+  float lane = u_riverY + sin(x * 0.35 + t * 0.2) * 0.9 + (a_seed.z - 0.5) * 1.7;
+  float y = lane + sin(x * 0.9 + a_seed.w * 6.2832 + t * 0.6) * 0.28 * u_turb + (a_seed.y - 0.5) * 0.35;
+  float z = (a_seed.w - 0.5) * 3.2 + cos(x * 0.8 + a_seed.z * 6.2832 - t * 0.5) * 0.35 * u_turb;
+  vec3 p = vec3(x, y, z);
+  vec3 d = p - u_pointer;
+  float dist = length(d);
+  if (dist < 1.6) p += normalize(d) * (1.6 - dist) * 0.7;
+  vec4 clip = u_vp * vec4(p, 1.0);
+  gl_Position = clip;
+  float size = mix(u_sandSize, u_goldSize * 2.6, a_gold);
+  gl_PointSize = max(1.0, size * u_scale / clip.w);
+  float edge = smoothstep(X0, X0 + 3.0, x) * (1.0 - smoothstep(X1 - 3.0, X1, x));
+  float fog = 1.0 - smoothstep(u_camDist - 1.0, u_camDist + 16.0, clip.w);
+  vec3 sand = mix(vec3(0.42, 0.40, 0.38), vec3(0.79, 0.71, 0.54), a_seed.z) * u_sandDim;
+  vec3 gold = vec3(0.86, 0.69, 0.27) * u_goldGlow;
+  v_col = mix(sand, gold, a_gold) * edge * fog;
+  v_gold = a_gold;
+}`;
+const SAND_FRAG = `
+precision mediump float;
+varying vec3 v_col;
+varying float v_gold;
+void main() {
+  vec2 c = gl_PointCoord * 2.0 - 1.0;
+  float r2 = dot(c, c);
+  if (r2 > 1.0) discard;
+  // Sand: a soft dot. Gold: a bright core inside a wide halo (stands in for bloom).
+  float a = v_gold > 0.5 ? exp(-r2 * 9.0) * 0.8 + smoothstep(0.1, 0.0, r2) * 1.2 : (1.0 - r2) * 0.8;
+  gl_FragColor = vec4(v_col * a, 1.0);
+}`;
+
+// Column-major 4x4 matrix helpers for the camera.
+function perspective(fovy, aspect, near, far) {
+  const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+  return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+}
+function lookAt(eye, target) {
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const norm = v => {
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const z = norm(sub(eye, target)), x = norm(cross([0, 1, 0], z)), y = cross(z, x);
+  return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, eye), -dot(y, eye), -dot(z, eye), 1];
+}
+function multiply(a, b) {
+  const o = new Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+    o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+  }
+  return o;
+}
+function invertVP(vp) {
+  // Only used to unproject the pointer; a generic 4x4 inverse.
+  const m = vp, inv = new Array(16);
+  inv[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15] + m[9] * m[7] * m[14] + m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
+  inv[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15] - m[8] * m[7] * m[14] - m[12] * m[6] * m[11] + m[12] * m[7] * m[10];
+  inv[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15] + m[8] * m[7] * m[13] + m[12] * m[5] * m[11] - m[12] * m[7] * m[9];
+  inv[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14] - m[8] * m[6] * m[13] - m[12] * m[5] * m[10] + m[12] * m[6] * m[9];
+  inv[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15] - m[9] * m[3] * m[14] - m[13] * m[2] * m[11] + m[13] * m[3] * m[10];
+  inv[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15] + m[8] * m[3] * m[14] + m[12] * m[2] * m[11] - m[12] * m[3] * m[10];
+  inv[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15] - m[8] * m[3] * m[13] - m[12] * m[1] * m[11] + m[12] * m[3] * m[9];
+  inv[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14] + m[8] * m[2] * m[13] + m[12] * m[1] * m[10] - m[12] * m[2] * m[9];
+  inv[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15] + m[5] * m[3] * m[14] + m[13] * m[2] * m[7] - m[13] * m[3] * m[6];
+  inv[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15] - m[4] * m[3] * m[14] - m[12] * m[2] * m[7] + m[12] * m[3] * m[6];
+  inv[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15] + m[4] * m[3] * m[13] + m[12] * m[1] * m[7] - m[12] * m[3] * m[5];
+  inv[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14] - m[4] * m[2] * m[13] - m[12] * m[1] * m[6] + m[12] * m[2] * m[5];
+  inv[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11] - m[5] * m[3] * m[10] - m[9] * m[2] * m[7] + m[9] * m[3] * m[6];
+  inv[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11] + m[4] * m[3] * m[10] + m[8] * m[2] * m[7] - m[8] * m[3] * m[6];
+  inv[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11] - m[4] * m[3] * m[9] - m[8] * m[1] * m[7] + m[8] * m[3] * m[5];
+  inv[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10] + m[4] * m[2] * m[9] + m[8] * m[1] * m[6] - m[8] * m[2] * m[5];
+  const det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+  return inv.map(v => v / (det || 1));
+}
+const transformPoint = (m, x, y, z) => {
+  const w = m[3] * x + m[7] * y + m[11] * z + m[15];
+  return [(m[0] * x + m[4] * y + m[8] * z + m[12]) / w, (m[1] * x + m[5] * y + m[9] * z + m[13]) / w, (m[2] * x + m[6] * y + m[10] * z + m[14]) / w];
+};
+
+const SAND_COUNT = COMPACT ? 40000 : 140000;
+const GOLD_RATIO = 0.0035;
+const SAND_FOV = 42 * Math.PI / 180;
+// Hero: the full river. Content pages: a dimmer, calmer river behind the copy.
+const SAND_LOOK = {
+  hero: {
+    flow: 1.4,
+    turb: 0.9,
+    sandDim: 0.75,
+    goldGlow: 1.5,
+    riverY: -0.6
+  },
+  content: {
+    flow: 0.8,
+    turb: 0.6,
+    sandDim: 0.26,
+    goldGlow: 0.9,
+    riverY: -1.6
+  }
+};
+function startSand(mount) {
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "width:100%;height:100%;display:block";
+  mount.appendChild(canvas);
+  const gl = canvas.getContext("webgl", {
+    alpha: true,
+    antialias: false,
+    premultipliedAlpha: true,
+    powerPreference: "high-performance"
+  });
+  if (!gl) {
+    canvas.remove();
+    return null;
+  }
+  const compile = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, SAND_VERT));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, SAND_FRAG));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+
+  // Per-particle random seeds; gold grains are drawn last so they sit on top.
+  const seeds = new Float32Array(SAND_COUNT * 4);
+  const gold = new Float32Array(SAND_COUNT);
+  const goldCount = Math.round(SAND_COUNT * GOLD_RATIO);
+  for (let i = 0; i < SAND_COUNT; i++) {
+    for (let k = 0; k < 4; k++) seeds[i * 4 + k] = Math.random();
+    gold[i] = i >= SAND_COUNT - goldCount ? 1 : 0;
+  }
+  const bind = (name, data, size) => {
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, name);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+    return buf;
+  };
+  const buffers = [bind("a_seed", seeds, 4), bind("a_gold", gold, 1)];
+  const U = {};
+  for (const n of ["u_vp", "u_camDist", "u_time", "u_flow", "u_turb", "u_riverY", "u_scale", "u_sandSize", "u_goldSize", "u_sandDim", "u_goldGlow", "u_pointer"]) {
+    U[n] = gl.getUniformLocation(prog, n);
+  }
+  // Small screens see the river from farther away, so grains are drawn larger.
+  const sizeBoost = COMPACT ? 1.7 : 1;
+  gl.uniform1f(U.u_sandSize, 0.024 * sizeBoost);
+  gl.uniform1f(U.u_goldSize, 0.06 * sizeBoost);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE);
+  gl.clearColor(0, 0, 0, 0);
+
+  const look = {
+    ...SAND_LOOK.hero
+  };
+  let target = SAND_LOOK.hero;
+  const pointer = [0, 0, 99];
+  const parallax = [0, 0];
+  let vp = null;
+  let width = 0, height = 0;
+  const resize = () => {
+    const ratio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+    width = mount.clientWidth;
+    height = mount.clientHeight;
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform1f(U.u_scale, canvas.height * 0.5 / Math.tan(SAND_FOV / 2));
+  };
+  resize();
+  const ro = new ResizeObserver(resize);
+  ro.observe(mount);
+
+  // Pointer: unproject onto the z = 0 plane so the sand parts under the cursor.
+  const onPointer = e => {
+    if (!vp || !width) return;
+    const nx = e.clientX / width * 2 - 1, ny = -(e.clientY / height) * 2 + 1;
+    parallax[0] = nx;
+    parallax[1] = ny;
+    const inv = invertVP(vp);
+    const a = transformPoint(inv, nx, ny, -1), b = transformPoint(inv, nx, ny, 1);
+    const t = a[2] / (a[2] - b[2]);
+    pointer[0] = a[0] + (b[0] - a[0]) * t;
+    pointer[1] = a[1] + (b[1] - a[1]) * t;
+    pointer[2] = 0;
+  };
+  const onLeave = () => {
+    pointer[2] = 99;
+  };
+  window.addEventListener("pointermove", onPointer, {
+    passive: true
+  });
+  document.documentElement.addEventListener("mouseleave", onLeave);
+
+  let frame = 0, last = performance.now(), time = 0;
+  const draw = now => {
+    const dt = Math.min((now - last) / 1000, 1 / 30);
+    last = now;
+    time += dt;
+    const k = 1 - Math.exp(-dt * 2.4);
+    for (const key in look) look[key] += (target[key] - look[key]) * k;
+    const aspect = width / Math.max(height, 1);
+    // Portrait screens pull the camera back so the whole river stays in frame.
+    const dist = 14 * Math.sqrt(Math.max(1, 1.5 / aspect));
+    const proj = perspective(SAND_FOV, aspect, 0.1, 100);
+    const eye = [parallax[0] * 0.6, 3.0 + parallax[1] * 0.35, dist];
+    gl.uniform1f(U.u_camDist, dist);
+    vp = multiply(proj, lookAt(eye, [0, 1.9, 0]));
+    gl.uniformMatrix4fv(U.u_vp, false, vp);
+    gl.uniform1f(U.u_time, time);
+    gl.uniform1f(U.u_flow, look.flow);
+    gl.uniform1f(U.u_turb, look.turb);
+    // On phones and tablets the copy fills the upper screen: run the river lower.
+    gl.uniform1f(U.u_riverY, look.riverY - (COMPACT ? 2.6 : 0));
+    gl.uniform1f(U.u_sandDim, look.sandDim * (COMPACT ? 1.3 : 1));
+    gl.uniform1f(U.u_goldGlow, look.goldGlow);
+    gl.uniform3f(U.u_pointer, pointer[0], pointer[1], pointer[2]);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.POINTS, 0, SAND_COUNT);
+    frame = requestAnimationFrame(draw);
+  };
+  frame = requestAnimationFrame(draw);
+  return {
+    setPage(page) {
+      target = page === 0 ? SAND_LOOK.hero : SAND_LOOK.content;
+    },
+    dispose() {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      window.removeEventListener("pointermove", onPointer);
+      document.documentElement.removeEventListener("mouseleave", onLeave);
+      buffers.forEach(b => gl.deleteBuffer(b));
+      gl.deleteProgram(prog);
+      canvas.remove();
+    }
+  };
+}
+function SandHero({
   page = 0
 }) {
   const mountRef = useRef(null);
-  const sceneRef = useRef(null);
-  const pageRef = useRef(page);
-  const speedRef = useRef(rotationSpeed);
-  const threeReady = useThreeReady();
+  const sandRef = useRef(null);
+  const ready = useIdleReady();
+  const [on, setOn] = useState(false);
   useEffect(() => {
-    pageRef.current = page;
-  }, [page]);
-  useEffect(() => {
-    speedRef.current = rotationSpeed;
-  }, [rotationSpeed]);
-  useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount || !threeReady) return;
-    const width = mount.clientWidth;
-    const height = mount.clientHeight;
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x070707, 0.028);
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 0, 12);
-    const FIT_RADIUS = 6.4;
-    const fitCamera = (w, h) => {
-      const aspect = w / h;
-      const vFov = camera.fov * Math.PI / 180;
-      const distH = FIT_RADIUS / Math.tan(vFov / 2);
-      const distW = FIT_RADIUS / (Math.tan(vFov / 2) * aspect);
-      camera.position.z = Math.max(distH, distW, 11);
-    };
-    fitCamera(width, height);
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true
-    });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
-    renderer.setSize(width, height);
-    renderer.setClearColor(0x000000, 0);
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
-    mount.appendChild(renderer.domElement);
-    const ambient = new THREE.AmbientLight(0x1a1610, 0.3);
-    scene.add(ambient);
-    const hemi = new THREE.HemisphereLight(0xffd86b, 0x0a0a0a, 0.4);
-    scene.add(hemi);
-    const keyLight = new THREE.PointLight(0xffd86b, 3.5, 30);
-    keyLight.position.set(6, 6, 8);
-    scene.add(keyLight);
-    const fillLight = new THREE.PointLight(0xfff0c0, 1.4, 25);
-    fillLight.position.set(-7, -2, 6);
-    scene.add(fillLight);
-    const rimLight = new THREE.PointLight(0xffb84a, 4, 20);
-    rimLight.position.set(-3, 3, -8);
-    scene.add(rimLight);
-    const bottomLight = new THREE.PointLight(0xb8860b, 1.5, 20);
-    bottomLight.position.set(2, -6, 4);
-    scene.add(bottomLight);
-    const goldHex = new THREE.Color(goldColor);
-    const goldMaterial = new THREE.MeshStandardMaterial({
-      color: goldHex,
-      metalness: 1.0,
-      roughness: 0.18,
-      emissive: new THREE.Color(0x2a1f08),
-      emissiveIntensity: 0.3
-    });
-    const goldDarkMaterial = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(0x6b4f12),
-      metalness: 1.0,
-      roughness: 0.35
-    });
-    const group = new THREE.Group();
-    scene.add(group);
-    const coreGeom = new THREE.DodecahedronGeometry(1.8, 0);
-    const core = new THREE.Mesh(coreGeom, goldMaterial);
-    group.add(core);
-    const edgesGeom = new THREE.EdgesGeometry(coreGeom);
-    const edgesMat = new THREE.LineBasicMaterial({
-      color: 0xfff0a0,
-      transparent: true,
-      opacity: 0.4
-    });
-    const edges = new THREE.LineSegments(edgesGeom, edgesMat);
-    core.add(edges);
-    const orbiters = [];
-    const orbiterGeom = new THREE.OctahedronGeometry(0.28, 0);
-    for (let i = 0; i < 8; i++) {
-      const m = new THREE.Mesh(orbiterGeom, goldMaterial);
-      const angle = i / 8 * Math.PI * 2;
-      const radius = 3.2;
-      m.position.set(Math.cos(angle) * radius, Math.sin(angle) * 0.5, Math.sin(angle) * radius);
-      m.userData = {
-        angle,
-        radius,
-        phase: i * 0.4
-      };
-      group.add(m);
-      orbiters.push(m);
+    if (!ready || !mountRef.current) return;
+    let sand = null;
+    try {
+      sand = startSand(mountRef.current);
+    } catch (e) {
+      sand = null;
     }
-    const ringGeom1 = new THREE.TorusGeometry(2.5, 0.025, 8, 128);
-    const ring1 = new THREE.Mesh(ringGeom1, goldMaterial);
-    ring1.rotation.x = Math.PI / 2.5;
-    group.add(ring1);
-    const ringGeom2 = new THREE.TorusGeometry(3.0, 0.02, 8, 128);
-    const ring2 = new THREE.Mesh(ringGeom2, goldDarkMaterial);
-    ring2.rotation.x = Math.PI / 3.5;
-    ring2.rotation.z = Math.PI / 6;
-    group.add(ring2);
-    const ringGeom3 = new THREE.TorusGeometry(3.7, 0.012, 6, 128);
-    const ring3 = new THREE.Mesh(ringGeom3, goldDarkMaterial);
-    ring3.rotation.x = Math.PI / 2;
-    ring3.rotation.y = Math.PI / 5;
-    group.add(ring3);
-    const particleCount = Math.floor((COMPACT ? 400 : 800) * particleDensity);
-    const particlesGeom = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const scales = new Float32Array(particleCount);
-    for (let i = 0; i < particleCount; i++) {
-      const r = 4 + Math.random() * 10;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 14;
-      positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-      scales[i] = Math.random();
+    if (!sand) {
+      document.documentElement.classList.add("no-3d");
+      return;
     }
-    particlesGeom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    particlesGeom.setAttribute("scale", new THREE.BufferAttribute(scales, 1));
-    const particleMaterial = new THREE.PointsMaterial({
-      color: 0xffd86b,
-      size: 0.04,
-      transparent: true,
-      opacity: 0.7,
-      sizeAttenuation: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    const particles = new THREE.Points(particlesGeom, particleMaterial);
-    scene.add(particles);
-    const mouse = {
-      x: 0,
-      y: 0,
-      tx: 0,
-      ty: 0
-    };
-    const onMouseMove = e => {
-      const rect = mount.getBoundingClientRect();
-      mouse.tx = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
-      mouse.ty = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    let frameId = null;
-    const clock = new THREE.Clock();
-    const layoutFor = p => p === 0 ? {
-      x: 2.6,
-      y: 0.0,
-      s: 1.0
-    } : {
-      x: 3.9,
-      y: 0.7,
-      s: 0.66
-    };
-    const initL = layoutFor(pageRef.current);
-    const base = {
-      x: initL.x,
-      y: initL.y,
-      s: initL.s
-    };
-    const animate = () => {
-      const elapsed = clock.getElapsedTime();
-      const speed = speedRef.current;
-      mouse.x += (mouse.tx - mouse.x) * 0.04;
-      mouse.y += (mouse.ty - mouse.y) * 0.04;
-      const target = layoutFor(pageRef.current);
-      base.x += (target.x - base.x) * 0.045;
-      base.y += (target.y - base.y) * 0.045;
-      base.s += (target.s - base.s) * 0.045;
-      group.rotation.y += 0.0024 * speed;
-      group.rotation.x = mouse.y * 0.12;
-      group.position.x = base.x + mouse.x * 0.15;
-      group.position.y = base.y;
-      group.scale.setScalar(base.s);
-      core.rotation.x += 0.0035 * speed;
-      core.rotation.y += 0.0025 * speed;
-      orbiters.forEach((m, i) => {
-        const ud = m.userData;
-        const t = elapsed * 0.4 * speed + ud.phase;
-        m.position.x = Math.cos(ud.angle + t * 0.3) * ud.radius;
-        m.position.z = Math.sin(ud.angle + t * 0.3) * ud.radius;
-        m.position.y = Math.sin(t + ud.phase) * 0.8;
-        m.rotation.x += 0.01 * speed;
-        m.rotation.y += 0.013 * speed;
-      });
-      ring1.rotation.z += 0.001 * speed;
-      ring2.rotation.y += 0.0015 * speed;
-      ring3.rotation.x += 0.0008 * speed;
-      particles.rotation.y += 0.0004;
-      const pPos = particles.geometry.attributes.position.array;
-      for (let i = 1; i < pPos.length; i += 3) {
-        pPos[i] += Math.sin(elapsed * 0.5 + i * 0.1) * 0.0008;
-      }
-      particles.geometry.attributes.position.needsUpdate = true;
-      renderer.render(scene, camera);
-      frameId = requestAnimationFrame(animate);
-    };
-    animate();
-    const onResize = () => {
-      const w = mount.clientWidth;
-      const h = mount.clientHeight;
-      camera.aspect = w / h;
-      fitCamera(w, h);
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
-    window.addEventListener("resize", onResize);
-    let ro = null;
-    if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(() => onResize());
-      ro.observe(mount);
-    }
-    const tA = setTimeout(onResize, 400);
-    const tB = setTimeout(onResize, 1200);
-    sceneRef.current = {
-      scene,
-      renderer,
-      goldMaterial,
-      edgesMat
-    };
+    sandRef.current = sand;
+    sand.setPage(page);
+    setOn(true);
     return () => {
-      cancelAnimationFrame(frameId);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("resize", onResize);
-      if (ro) ro.disconnect();
-      clearTimeout(tA);
-      clearTimeout(tB);
-      renderer.dispose();
-      coreGeom.dispose();
-      edgesGeom.dispose();
-      orbiterGeom.dispose();
-      ringGeom1.dispose();
-      ringGeom2.dispose();
-      ringGeom3.dispose();
-      particlesGeom.dispose();
-      goldMaterial.dispose();
-      goldDarkMaterial.dispose();
-      particleMaterial.dispose();
-      edgesMat.dispose();
-      if (renderer.domElement.parentNode === mount) {
-        mount.removeChild(renderer.domElement);
-      }
+      sand.dispose();
+      sandRef.current = null;
     };
-  }, [goldColor, particleDensity, threeReady]);
+  }, [ready]);
+  useEffect(() => {
+    if (sandRef.current) sandRef.current.setPage(page);
+  }, [page]);
   return React.createElement("div", {
     ref: mountRef,
     id: "three-bg",
-    className: threeReady ? "three-on" : ""
+    className: on ? "three-on" : ""
   });
 }
 function ThreePillar({
@@ -831,7 +892,7 @@ function ThreePillar({
   });
 }
 Object.assign(window, {
-  ThreeHero,
+  SandHero,
   ThreePillar
 });
 })();
@@ -1234,9 +1295,7 @@ const {
   useCallback
 } = React;
 const VISUAL = {
-  goldColor: "#D4AF37",
-  rotationSpeed: 1,
-  particleDensity: 1
+  goldColor: "#D4AF37"
 };
 // Locale is encoded in the URL: "/" is Traditional Chinese, "/en/" is English.
 const localeFromPath = () => location.pathname.startsWith("/en") ? "en" : "zh";
@@ -1670,10 +1729,7 @@ function App() {
   useEffect(() => {
     document.body.setAttribute("data-page", currentPage === 0 ? "hero" : "content");
   }, [currentPage]);
-  return React.createElement(React.Fragment, null, React.createElement(ThreeHero, {
-    goldColor: VISUAL.goldColor,
-    rotationSpeed: VISUAL.rotationSpeed,
-    particleDensity: VISUAL.particleDensity,
+  return React.createElement(React.Fragment, null, React.createElement(SandHero, {
     page: currentPage
   }), React.createElement("div", {
     id: "bg-scrim"
