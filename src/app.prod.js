@@ -413,6 +413,24 @@ const {
   useState
 } = React;
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Only use WebGL with real GPU acceleration: software rendering turns every
+// animation frame into a long main-thread task.
+const HARDWARE_WEBGL = (() => {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl", {
+      failIfMajorPerformanceCaveat: true
+    });
+    if (!gl) return false;
+    const lose = gl.getExtension("WEBGL_lose_context");
+    if (lose) lose.loseContext();
+    return true;
+  } catch (e) {
+    return false;
+  }
+})();
+const USE_3D = !REDUCED_MOTION && HARDWARE_WEBGL;
+// Without 3D, CSS shows a static gold glow in its place (see .no-3d in index.html).
+if (!USE_3D) document.documentElement.classList.add("no-3d");
 // Phones and tablets get a lighter scene: lower pixel ratio, fewer particles.
 const COMPACT = window.matchMedia("(max-width: 1024px)").matches;
 const MAX_PIXEL_RATIO = COMPACT ? 1.5 : 2;
@@ -444,11 +462,11 @@ function loadThree() {
 }
 
 // True once THREE has loaded and the browser is idle again, so WebGL setup
-// never competes with first paint. Stays false when reduced motion is requested.
+// never competes with first paint. Stays false when 3D is disabled (USE_3D).
 function useThreeReady() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    if (REDUCED_MOTION) return;
+    if (!USE_3D) return;
     let cancelled = false;
     loadThree().then(() => whenIdle(() => {
       if (!cancelled) setReady(true);

@@ -113,13 +113,12 @@
   }
   /* 3D background fades in only once the (async) Three.js scene is ready */
   #three-bg.three-on { opacity: 1; }
-  /* No WebGL when reduced motion is requested: a static gold glow stands in. */
-  @media (prefers-reduced-motion: reduce) {
-    #three-bg {
-      opacity: 1;
-      transition: none;
-      background: radial-gradient(circle at 72% 48%, rgba(212,175,55,0.14) 0%, rgba(212,175,55,0.04) 28%, transparent 55%);
-    }
+  /* No 3D (reduced motion, or no GPU-accelerated WebGL): a static gold glow
+     stands in. The no-3d class is set by src/app.prod.js. */
+  .no-3d #three-bg {
+    opacity: 1;
+    transition: none;
+    background: radial-gradient(circle at 72% 48%, rgba(212,175,55,0.14) 0%, rgba(212,175,55,0.04) 28%, transparent 55%);
   }
   /* Readability scrim that sits between the 3D bg and the page content.
      Darkens behind text; its character changes per page via body[data-page]. */
