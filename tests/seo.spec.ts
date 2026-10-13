@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { LOCALES, openStatic, readDist } from "./helpers";
 
 const SITE = "https://gsinvest.com.tw";
@@ -59,4 +59,22 @@ test("robots.txt, sitemap.xml and llms.txt are generated", async () => {
   expect(sitemap).toContain(`<loc>${SITE}/</loc>`);
   expect(sitemap).toContain(`<loc>${SITE}/en/</loc>`);
   expect(readDist("dist/llms.txt")).toContain("gsinvest@gsinvest.com.tw");
+});
+
+test("favicons exist in every format browsers and crawlers look for", async ({ browser }) => {
+  const sizes: Record<string, number> = { "favicon-48.png": 48, "favicon-96.png": 96, "favicon-192.png": 192, "apple-touch-icon.png": 180, "logo-512.png": 512 };
+  for (const [file, px] of Object.entries(sizes)) {
+    const buf = readFileSync(`dist/${file}`);
+    // PNG IHDR: width and height are big-endian at bytes 16 and 20.
+    expect([buf.readUInt32BE(16), buf.readUInt32BE(20)], file).toEqual([px, px]);
+  }
+  const ico = readFileSync("dist/favicon.ico");
+  expect(ico.readUInt16LE(2), "ICO type").toBe(1);
+  expect(ico.readUInt16LE(4), "ICO image count").toBe(3);
+
+  const page = await openStatic(browser, "dist/index.html");
+  await expect(page.locator('link[rel="icon"][href="/favicon.ico"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="icon"][sizes="192x192"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute("href", "/apple-touch-icon.png");
 });

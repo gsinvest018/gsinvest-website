@@ -8,6 +8,7 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
+import { buildIcons } from "./icons.mjs";
 import { buildImages } from "./images.mjs";
 import { prerender } from "./prerender.mjs";
 import { llmsTxt, renderHead, robotsTxt, sitemapXml } from "./seo.mjs";
@@ -25,6 +26,7 @@ const VENDOR = {
 async function copyAssets() {
   await cp(path.join(SRC, "static"), DIST, { recursive: true });
   await cp(path.join(SRC, "favicon.svg"), path.join(DIST, "favicon.svg"));
+  await buildIcons(path.join(SRC, "favicon.svg"), DIST);
   await mkdir(path.join(DIST, "vendor"), { recursive: true });
   for (const [name, from] of Object.entries(VENDOR)) {
     await cp(path.join(ROOT, from), path.join(DIST, "vendor", name));

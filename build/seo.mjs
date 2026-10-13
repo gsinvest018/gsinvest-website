@@ -18,7 +18,7 @@ export function structuredData(localeKey) {
         legalName: ORG.legalNameZh,
         alternateName: [localeKey === "zh" ? ORG.legalNameEn : ORG.legalNameZh, ...ORG.alternateNames],
         url: abs("/"),
-        logo: abs("/favicon.svg"),
+        logo: abs("/logo-512.png"),
         image: abs(OG_IMAGE.path),
         description: LOCALE_META[localeKey].description,
         foundingDate: ORG.foundingDate,
