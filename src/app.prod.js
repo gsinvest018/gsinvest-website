@@ -989,10 +989,13 @@ function Philosophy({
   }, t.philosophy.pillars.map((p, i) => React.createElement("div", {
     key: i,
     className: "pillar"
+  }, React.createElement("div", {
+    className: "pillar-3d",
+    "aria-hidden": "true"
   }, active && React.createElement(ThreePillar, {
     shape: shapes[i],
     goldColor: goldColor
-  }), React.createElement("h4", null, p.en), React.createElement("div", {
+  })), React.createElement("h3", null, p.en), React.createElement("div", {
     className: "en"
   }, "\u2014 ", p.zh, " \u2014"), React.createElement("p", null, p.desc))))));
 }
@@ -1024,7 +1027,7 @@ function Team({
     className: "idx"
   }, String(i + 1).padStart(2, "0")), React.createElement("div", {
     className: "dept"
-  }, React.createElement("h4", null, m.name), React.createElement("div", {
+  }, React.createElement("h3", null, m.name), React.createElement("div", {
     className: "role"
   }, m.role)), React.createElement("p", {
     className: "bio"
@@ -1128,7 +1131,7 @@ function Milestones({
     className: "ms-dot"
   }), React.createElement("div", {
     className: "ms-body"
-  }, React.createElement("h4", null, item.title), React.createElement("p", null, item.desc)))))));
+  }, React.createElement("h3", null, item.title), React.createElement("p", null, item.desc)))))));
 }
 function Contact({
   t
@@ -1278,7 +1281,27 @@ function Nav({
     id: 7,
     label: t.nav.contact
   }];
-  return React.createElement("nav", {
+  const otherLocale = locale === "zh" ? "en" : "zh";
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = e => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+  const menuNavigate = id => e => {
+    e.preventDefault();
+    setMenuOpen(false);
+    // Wait for the scroll lock to be released before scrolling.
+    requestAnimationFrame(() => goTo(id));
+  };
+  return React.createElement(React.Fragment, null, React.createElement("nav", {
     className: "nav scrolled"
   }, React.createElement("a", {
     href: "#top",
@@ -1293,7 +1316,11 @@ function Nav({
     className: "nav-logo-text"
   }, React.createElement("span", {
     className: "zh"
+  }, React.createElement("span", {
+    className: "full"
   }, locale === "zh" ? "創世紀國際投資" : "Genesis Capital"), React.createElement("span", {
+    className: "short"
+  }, locale === "zh" ? "創世紀" : "Genesis")), React.createElement("span", {
     className: "en"
   }, "GS \xB7 EST. 2025"))), React.createElement("div", {
     className: "nav-links"
@@ -1316,9 +1343,33 @@ function Nav({
     "data-lang-switch": locale === "en" ? undefined : "en",
     onClick: () => setLocale("en")
   }, "EN")), React.createElement("button", {
+    className: "lang-compact",
+    "data-lang-switch": otherLocale,
+    lang: otherLocale === "zh" ? "zh-Hant" : "en",
+    title: otherLocale === "zh" ? "切換為繁體中文" : "Switch to English",
+    onClick: () => setLocale(otherLocale)
+  }, otherLocale === "zh" ? "中" : "EN"), React.createElement("button", {
     className: "nav-burger",
-    "aria-label": "menu"
-  }, React.createElement("span", null), React.createElement("span", null), React.createElement("span", null))));
+    "aria-label": t.nav.menu,
+    "aria-expanded": menuOpen,
+    "aria-controls": "mobile-menu",
+    onClick: () => setMenuOpen(o => !o)
+  }, React.createElement("span", null), React.createElement("span", null), React.createElement("span", null)))), React.createElement("div", {
+    id: "mobile-menu",
+    className: "mobile-menu",
+    hidden: !menuOpen
+  }, [{
+    id: 0,
+    label: locale === "zh" ? "首頁" : "Home"
+  }, ...links].map(l => React.createElement("a", {
+    key: l.id,
+    href: `#${PAGES[l.id].id}`,
+    className: currentPage === l.id ? "active" : "",
+    onClick: menuNavigate(l.id)
+  }, React.createElement("span", null, l.label), React.createElement("span", {
+    className: "num",
+    "aria-hidden": "true"
+  }, PAGES[l.id].num)))));
 }
 function Pager({
   t,
@@ -1355,14 +1406,36 @@ function PageCounter({
     className: "tot"
   }, String(total).padStart(2, "0")));
 }
+// Full-screen paging on desktop only; smaller screens scroll through the
+// sections. Keep in sync with the paged-mode media query in src/index.html.
+const PAGED_QUERY = "(min-width: 1025px)";
+function usePaged() {
+  // Starts true to match the prerendered (desktop) markup during hydration,
+  // then follows the real viewport.
+  const [paged, setPaged] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia(PAGED_QUERY);
+    const sync = () => setPaged(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return paged;
+}
 function App() {
   const [locale, setLocaleState] = useState(localeFromPath);
   const [currentPage, setCurrentPage] = useState(0);
+  const paged = usePaged();
+  const pagedRef = useRef(paged);
+  pagedRef.current = paged;
   const lockRef = useRef(false);
   const wheelAccum = useRef(0);
   useEffect(() => {
     // Signals build/prerender.mjs that the first render has committed.
     window.__appReady = true;
+    // The staggered reveal only exists in desktop paged mode; toggling a body
+    // class restyles the whole page, so skip it elsewhere.
+    if (!window.matchMedia(PAGED_QUERY).matches) return;
     document.body.classList.add("first-load");
     const tClear = setTimeout(() => document.body.classList.remove("first-load"), 1600);
     return () => {
@@ -1383,9 +1456,20 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-Hant" : "en";
   }, [locale]);
-  const goTo = useCallback(target => {
-    if (lockRef.current) return;
+  const goTo = useCallback((target, {
+    instant = false
+  } = {}) => {
     if (target < 0 || target >= PAGES.length) return;
+    if (!pagedRef.current) {
+      // Scroll mode: the IntersectionObserver below updates currentPage.
+      const el = document.getElementById(PAGES[target].id);
+      if (el) el.scrollIntoView(instant ? {
+        behavior: "instant",
+        block: "start"
+      } : undefined);
+      return;
+    }
+    if (lockRef.current) return;
     setCurrentPage(prev => {
       if (prev === target) return prev;
       lockRef.current = true;
@@ -1396,6 +1480,7 @@ function App() {
     });
   }, []);
   useEffect(() => {
+    if (!paged) return;
     let cooldown = false;
     let touchStartY = null;
     const tryNavWheel = deltaY => {
@@ -1462,17 +1547,62 @@ function App() {
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchend", onTouchEnd);
     };
-  }, [currentPage, goTo]);
+  }, [paged, currentPage, goTo]);
   useEffect(() => {
+    if (paged) return;
+    // The section crossing the middle of the viewport counts as current.
+    const io = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const idx = PAGES.findIndex(p => p.id === entry.target.id);
+        if (idx >= 0) setCurrentPage(idx);
+      }
+    }, {
+      rootMargin: "-45% 0px -54% 0px"
+    });
+    PAGES.forEach(p => {
+      const el = document.getElementById(p.id);
+      if (el) io.observe(el);
+    });
+    return () => io.disconnect();
+  }, [paged]);
+  const hashSynced = useRef(false);
+  useEffect(() => {
+    // Mirror the current page in the URL so links can be shared; the first
+    // run is skipped so an incoming hash is read before it can be replaced.
+    if (!hashSynced.current) {
+      hashSynced.current = true;
+      return;
+    }
+    const hash = currentPage === 0 ? "" : `#${PAGES[currentPage].id}`;
+    if (hash !== location.hash) history.replaceState(null, "", location.pathname + hash);
+  }, [currentPage]);
+  useEffect(() => {
+    const idxFromHash = () => PAGES.findIndex(p => p.id === location.hash.slice(1));
     const fromHash = () => {
-      const hash = location.hash.replace("#", "");
-      const idx = PAGES.findIndex(p => p.id === hash);
+      const idx = idxFromHash();
       if (idx >= 0) goTo(idx);
     };
-    fromHash();
+    // The incoming hash is applied without animation. In scroll mode it is
+    // applied again once web fonts have settled the layout, because the
+    // browser's own jump to the fragment happens before they load.
+    const align = () => {
+      const idx = idxFromHash();
+      if (idx >= 0) goTo(idx, {
+        instant: true
+      });
+    };
+    align();
+    let cancelled = false;
+    if (!paged && document.fonts) document.fonts.ready.then(() => {
+      if (!cancelled) align();
+    });
     window.addEventListener("hashchange", fromHash);
-    return () => window.removeEventListener("hashchange", fromHash);
-  }, [goTo]);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("hashchange", fromHash);
+    };
+  }, [goTo, paged]);
   const renderPage = i => {
     const active = i === currentPage;
     switch (i) {
@@ -1536,7 +1666,7 @@ function App() {
   }, PAGES.map((p, i) => React.createElement("div", {
     key: i,
     className: pageClass(i),
-    "aria-hidden": i !== currentPage
+    "aria-hidden": paged && i !== currentPage
   }, renderPage(i)))), React.createElement(Pager, {
     t: t,
     currentPage: currentPage,

@@ -22,7 +22,7 @@
     --bg-3: #141414;
     --ink: #efe6d2;
     --ink-dim: #9a907a;
-    --ink-mute: #5c5446;
+    --ink-mute: #8a7f69; /* >= 4.5:1 on --bg and --bg-3 (WCAG AA) */
     --line: rgba(212, 175, 55, 0.18);
     --line-soft: rgba(239, 230, 210, 0.08);
     --gold: #D4AF37;
@@ -297,7 +297,7 @@
     border-bottom: 1px solid var(--line);
   }
   @media (max-width: 768px) {
-    .nav, .nav.scrolled { padding-left: 24px; padding-right: 24px; }
+    .nav, .nav.scrolled { padding: 10px 20px; }
   }
 
   .nav-logo {
@@ -400,7 +400,64 @@
 
   @media (max-width: 1024px) {
     .nav-links .nav-link:not(.lang-keep) { display: none; }
-    .nav-burger { display: flex; }
+    .nav-burger { display: flex; align-items: center; width: 44px; height: 44px; }
+  }
+  .nav-burger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+  .nav-burger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+  .nav-burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+  /* Full-screen menu for phones and tablets. Rendered outside .nav because the
+     nav's backdrop-filter would otherwise become its containing block. */
+  .mobile-menu {
+    position: fixed;
+    inset: 0;
+    z-index: 95;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 96px 32px 48px;
+    background: rgba(7,7,7,0.97);
+  }
+  .mobile-menu[hidden] { display: none; }
+  .mobile-menu a {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line-soft);
+    font-family: var(--serif);
+    font-size: 22px;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .mobile-menu a.active, .mobile-menu a:hover { color: var(--gold); }
+  .mobile-menu .num { font-family: var(--serif-en); font-style: italic; font-size: 14px; color: var(--gold); }
+  @media (min-width: 1025px) { .mobile-menu { display: none !important; } }
+
+  /* Compact header on phones: short name, single language button. */
+  .nav-logo-text .short, .lang-compact { display: none; }
+  .lang-compact {
+    min-width: 44px;
+    height: 44px;
+    padding: 0 12px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: none;
+    color: var(--gold);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+  }
+  @media (max-width: 768px) {
+    .nav-logo-text .full, .nav-logo-text .en, .lang-toggle { display: none; }
+    .nav-logo-text .short { display: inline; }
+    .lang-compact { display: inline-flex; }
+    .nav-links { gap: 12px; }
   }
 
   /* Hero */
@@ -824,7 +881,7 @@
     text-align: center;
   }
   .pillar canvas { width: 100%; height: 140px; display: block; }
-  .pillar h4 {
+  .pillar h3 {
     font-size: 28px;
     margin: 20px 0 8px;
     background: linear-gradient(135deg, var(--gold-lo), var(--gold-hi));
@@ -879,7 +936,7 @@
     color: rgba(212,175,55,0.25);
     font-weight: 400;
   }
-  .team-card h4 {
+  .team-card h3 {
     font-size: 19px;
     margin-bottom: 4px;
   }
@@ -921,7 +978,7 @@
     line-height: 1;
     color: var(--gold);
   }
-  .team-row .dept h4 {
+  .team-row .dept h3 {
     font-size: 25px;
     margin-bottom: 6px;
     color: var(--ink);
@@ -977,8 +1034,7 @@
     object-position: center;
     transition: transform 1.4s cubic-bezier(.16,.84,.3,1);
   }
-  /* Keep lazy images on hidden pages from loading until their page is shown. */
-  .page:not(.active) .space-fig picture { display: none; }
+
   .space-fig:hover .space-img { transform: scale(1.06); }
   .space-cap {
     position: absolute;
@@ -1071,7 +1127,7 @@
     padding-left: 50px;
   }
   @media (max-width: 768px) { .milestone .body { padding-left: 32px; } }
-  .milestone h4 {
+  .milestone h3 {
     font-size: 22px;
     margin-bottom: 8px;
     line-height: 1.3;
@@ -1221,46 +1277,70 @@
      PAGED MODE — full-screen pages with transitions
      ════════════════════════════════════════════════════════ */
 
-  html, body { height: 100%; }
-  body { overflow: hidden; }
+  /* Paged mode is desktop-only (> 1024px). Below that the sections stack and
+     the document scrolls normally; see "SCROLL MODE" below. Keep this
+     breakpoint in sync with PAGED_QUERY in src/app.prod.js. */
+  @media (min-width: 1025px) {
+    html, body { height: 100%; }
+    body { overflow: hidden; }
 
-  .page-shell {
-    position: fixed;
-    inset: 0;
-    overflow: hidden;
-    perspective: 1600px;
-    z-index: 2;
-    background: transparent;
+    .page-shell {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      perspective: 1600px;
+      z-index: 2;
+      background: transparent;
+    }
+
+    .page {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      pointer-events: none;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      background: transparent;
+    }
+    .page.active {
+      opacity: 1;
+      pointer-events: auto;
+      z-index: 2;
+    }
+
+    /* Override section padding for paged mode — each page handles its own layout */
+    .page section.section {
+      padding: 120px 0 80px;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .page section.section.contact {
+      /* Clears the fixed bottom-left page counter. */
+      padding-bottom: 72px;
+    }
+
+    /* Keep lazy images on hidden pages from loading until their page is shown. */
+    .page:not(.active) .space-fig picture { display: none; }
   }
 
-  .page {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    pointer-events: none;
-    overflow-y: auto;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-    background: transparent;
+  /* ════════════════════════════════════════════════════════
+     SCROLL MODE — phones and tablets (≤ 1024px)
+     ════════════════════════════════════════════════════════ */
+  @media (max-width: 1024px) {
+    .page-shell { position: relative; z-index: 2; }
+    .page { position: relative; }
+    .pager, .page-counter { display: none !important; }
+    /* Anchored sections clear the fixed nav bar. */
+    section[id] { scroll-margin-top: 66px; }
+    .page .hero { min-height: 100svh; }
   }
-  .page.active {
-    opacity: 1;
-    pointer-events: auto;
-    z-index: 2;
-  }
-
-  /* Override section padding for paged mode — each page handles its own layout */
-  .page section.section {
-    padding: 120px 0 80px;
-    min-height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  .page section.section.contact {
-    padding-bottom: 40px;
+  @media (max-width: 1024px) and (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
   }
   .page footer.footer {
     padding-top: 0;
@@ -1300,6 +1380,7 @@
 
   /* ─── Inner reveal — only on first load ─────────────── */
   .page-in > * { opacity: 1; transform: none; }
+  @media (min-width: 1025px) {
   body.first-load .page-in > * {
     opacity: 0;
     transform: translateY(28px);
@@ -1314,6 +1395,7 @@
   body.first-load .page.active .page-in > *:nth-child(6) { transition-delay: 0.74s; }
   body.first-load .page.active .page-in > *:nth-child(7) { transition-delay: 0.88s; }
   body.first-load .page.active .page-in > *:nth-child(8) { transition-delay: 1.0s; }
+  }
 
   /* ─── Side page nav (right rail) ────────────────────── */
   .pager {
@@ -1419,10 +1501,12 @@
      the true bottom and the base .hero align-items:center finally engages.
      108/88 balances visible clear space around the chrome: ~41px below the
      67px nav vs ~43px above the 45px ticker band. */
-  .page .hero {
-    min-height: 100%;
-    padding-top: 108px;
-    padding-bottom: 88px;
+  @media (min-width: 1025px) {
+    .page .hero {
+      min-height: 100%;
+      padding-top: 108px;
+      padding-bottom: 88px;
+    }
   }
   /* Short laptops (incl. 1366×768): compact only the elastic parts so the
      full-height hero never scrolls internally. */
@@ -1447,7 +1531,11 @@
     gap: 0;
   }
   @media (max-width: 1024px) { .timeline-h { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 600px) { .timeline-h { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) {
+    /* Single column with a vertical rail instead of the horizontal one. */
+    .timeline-h { grid-template-columns: 1fr; row-gap: 32px; margin-left: 6px; border-left: 1px solid var(--line); }
+    .timeline-h::before { display: none; }
+  }
 
   .timeline-h::before {
     content: "";
@@ -1487,8 +1575,27 @@
     border-radius: 50%;
   }
   .ms-h .ms-body { padding-top: 36px; }
-  .ms-h h4 { font-size: 17px; margin-bottom: 8px; line-height: 1.35; }
+  .ms-h h3 { font-size: 17px; margin-bottom: 8px; line-height: 1.35; }
   .ms-h p { font-size: 12px; line-height: 1.65; color: var(--ink-dim); }
+  @media (max-width: 600px) {
+    .ms-h { padding: 0 0 0 24px; }
+    .ms-h .ms-dot { top: 8px; left: -6px; }
+    .ms-h .ms-body { padding-top: 4px; }
+    .ms-h p { font-size: 13px; }
+  }
+
+  /* Philosophy pillars reserve the 3D slot so mounting WebGL never shifts layout. */
+  .pillar-3d { height: 140px; }
+
+  /* Phones and tablets: soften the 3D backdrop so it never competes with text. */
+  @media (max-width: 1024px) {
+    #three-bg.three-on { opacity: 0.35; }
+  }
+  @media (max-width: 540px) {
+    .contact-info-block { padding: 28px 20px; }
+    .contact-info-block .row { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
+    .contact-info-block .val { overflow-wrap: anywhere; }
+  }
 
   /* Inner reveal handled above in INTRO block — first-load only */
 
@@ -1497,6 +1604,15 @@
   .page::-webkit-scrollbar-track { background: transparent; }
   .page::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.2); }
 
+  /* Honor reduced-motion preferences: no page transitions, reveals or smooth scroll. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 </style>
 </head>
 <body style="background-color: rgb(9, 5, 5)">
