@@ -87,12 +87,12 @@ PR 上執行步驟 1–4 與第 5 節的檢查，但不部署。
 
 ### 2.2 結構化資料（JSON-LD）
 
-- `FinancialService`（`Organization` 子類型）：
+- `Corporation`（`Organization` 子類型）。原訂 `FinancialService`，實作時改掉：公司是以自有資金自營交易，`FinancialService` 容易被解讀為對外提供受監管的金融服務。
   - `name`：創世紀國際投資股份有限公司；`alternateName`：GS Genesis、Genesis International Capital
   - `url`、`logo`
   - `address`：台中市北屯區后庄路 41 號 10 樓-41
   - `telephone`：+886-4-2299-1928；`email`：gsinvest@gsinvest.com.tw
-  - `openingHoursSpecification`：週一至週四 09:00–17:30
+  - `contactPoint.hoursAvailable`：週一至週四 09:00–17:30
   - `foundingDate`：2025
 - `WebSite`：`name`、`url`、`inLanguage`。
 

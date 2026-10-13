@@ -175,41 +175,27 @@ const I18N = {
       titleEm: "對話",
       titleEn: "Begin a Conversation.",
       lead: "若您是潛在合作夥伴或希望深入了解 GS 創世紀的策略框架，歡迎透過以下方式直接與我們聯繫。",
-      form: {
-        name: "姓名 NAME",
-        company: "公司／機構 COMPANY",
-        email: "電子郵件 EMAIL",
-        phone: "聯絡電話 PHONE",
-        topic: "諮詢類別 TOPIC",
-        message: "留言 MESSAGE",
-        submit: "送出申請",
-        topics: ["合作洽談", "策略諮詢", "媒體聯絡", "求職應徵", "其他"]
-      },
       info: [{
         label: "Address",
-        val: "台中市北屯區后庄路 41 號 10 樓-41"
+        val: "台中市北屯區后庄路 41 號 10 樓-41",
+        href: "https://www.google.com/maps/search/?api=1&query=%E5%8F%B0%E4%B8%AD%E5%B8%82%E5%8C%97%E5%B1%AF%E5%8D%80%E5%90%8E%E5%BA%84%E8%B7%AF41%E8%99%9F"
       }, {
         label: "Contact",
         val: "Joker游"
       }, {
         label: "Phone",
-        val: "04-2299-1928"
+        val: "04-2299-1928",
+        href: "tel:+886422991928"
       }, {
         label: "Email",
-        val: "gsinvest@gsinvest.com.tw"
+        val: "gsinvest@gsinvest.com.tw",
+        href: "mailto:gsinvest@gsinvest.com.tw"
       }, {
         label: "Hours",
         val: "週一至週四  09:00 – 17:30 (GMT+8)"
       }]
     },
     footer: {
-      tagline: "創世紀國際投資股份有限公司\n以紀律之名，築世代之資。",
-      explore: "探索",
-      explore_links: ["關於我們", "業務範圍", "投資哲學", "經營團隊", "發展藍圖"],
-      legal: "法務",
-      legal_links: ["條款與條件", "隱私權政策", "Cookie 設定", "風險揭露"],
-      connect: "聯絡",
-      connect_links: ["LinkedIn", "gsinvest@gsinvest.com.tw", "04-2299-1928"],
       copy: "© 2026 GS Genesis International Investment Co., Ltd. All rights reserved.",
       built: "台中 · 台灣"
     },
@@ -385,41 +371,27 @@ const I18N = {
       titleEm: "conversation",
       titleEn: "Contact.",
       lead: "If you are a potential partner or would like to learn more about the Genesis framework, reach us directly through the channels below.",
-      form: {
-        name: "NAME",
-        company: "COMPANY",
-        email: "EMAIL",
-        phone: "PHONE",
-        topic: "TOPIC",
-        message: "MESSAGE",
-        submit: "Submit request",
-        topics: ["Partnership", "Strategy inquiry", "Press & media", "Careers", "Other"]
-      },
       info: [{
         label: "Address",
-        val: "10F.-41, No. 41, Houzhuang Rd.,\nBeitun Dist., Taichung, Taiwan"
+        val: "10F.-41, No. 41, Houzhuang Rd.,\nBeitun Dist., Taichung, Taiwan",
+        href: "https://www.google.com/maps/search/?api=1&query=%E5%8F%B0%E4%B8%AD%E5%B8%82%E5%8C%97%E5%B1%AF%E5%8D%80%E5%90%8E%E5%BA%84%E8%B7%AF41%E8%99%9F"
       }, {
         label: "Contact",
         val: "Joker游"
       }, {
         label: "Phone",
-        val: "+886 4 2299 1928"
+        val: "+886 4 2299 1928",
+        href: "tel:+886422991928"
       }, {
         label: "Email",
-        val: "gsinvest@gsinvest.com.tw"
+        val: "gsinvest@gsinvest.com.tw",
+        href: "mailto:gsinvest@gsinvest.com.tw"
       }, {
         label: "Hours",
         val: "Mon – Thu  09:00 – 17:30 (GMT+8)"
       }]
     },
     footer: {
-      tagline: "Genesis International Investment Co., Ltd.\nCompounding capital. Across generations.",
-      explore: "Explore",
-      explore_links: ["About", "Services", "Philosophy", "Team", "Roadmap"],
-      legal: "Legal",
-      legal_links: ["Terms & Conditions", "Privacy Policy", "Cookie Settings", "Risk Disclosure"],
-      connect: "Connect",
-      connect_links: ["LinkedIn", "gsinvest@gsinvest.com.tw", "+886 4 2299 1928"],
       copy: "© 2026 GS Genesis International Investment Co., Ltd. All rights reserved.",
       built: "Taichung · Taiwan"
     },
@@ -853,13 +825,11 @@ function Hero({
     className: "hero-cta"
   }, React.createElement("a", {
     href: "#about",
-    "data-pageto": "1",
     className: "btn btn-solid"
   }, t.hero.cta1, " ", React.createElement("span", {
     className: "arrow"
   }, "\u2192")), React.createElement("a", {
     href: "#contact",
-    "data-pageto": "6",
     className: "btn"
   }, t.hero.cta2, " ", React.createElement("span", {
     className: "arrow"
@@ -1139,9 +1109,17 @@ function Contact({
     style: {
       whiteSpace: "pre-line"
     }
-  }, row.val))))), React.createElement("div", {
+  }, row.href ? React.createElement("a", {
+    href: row.href,
+    ...(row.href.startsWith("http") ? {
+      target: "_blank",
+      rel: "noopener"
+    } : {})
+  }, row.val) : row.val))))), React.createElement("footer", {
     className: "contact-footer"
-  }, React.createElement("div", null, t.footer.copy), React.createElement("div", {
+  }, React.createElement("p", {
+    className: "disclaimer"
+  }, t.disclaimer), React.createElement("div", null, t.footer.copy), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",

@@ -2,12 +2,14 @@
 //   1. copy static assets and vendor libraries
 //   2. minify the application bundle
 //   3. write the HTML shell for each locale
-//   4. prerender each locale into its shell
+//   4. prerender each locale into its shell and add SEO <head> tags
+//   5. write robots.txt, sitemap.xml and llms.txt
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { prerender } from "./prerender.mjs";
+import { llmsTxt, renderHead, robotsTxt, sitemapXml } from "./seo.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = path.join(ROOT, "src");
@@ -54,7 +56,17 @@ export async function build() {
   await copyAssets();
   await bundleApp();
   await writeShells();
-  await prerender(DIST);
+  await prerender(DIST, {
+    transformHtml: (html, locale) => html.replace(/<title>[^<]*<\/title>/, renderHead(locale.key)),
+  });
+  await writeSeoFiles();
+}
+
+async function writeSeoFiles() {
+  const today = new Date().toISOString().slice(0, 10);
+  await writeFile(path.join(DIST, "robots.txt"), robotsTxt());
+  await writeFile(path.join(DIST, "sitemap.xml"), sitemapXml(today));
+  await writeFile(path.join(DIST, "llms.txt"), llmsTxt());
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
