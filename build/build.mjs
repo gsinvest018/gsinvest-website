@@ -11,6 +11,7 @@ import * as esbuild from "esbuild";
 import { buildIcons } from "./icons.mjs";
 import { buildImages } from "./images.mjs";
 import { prerender } from "./prerender.mjs";
+import { INDEXNOW_KEY } from "./seo.config.mjs";
 import { llmsTxt, renderHead, robotsTxt, sitemapXml } from "./seo.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -88,6 +89,7 @@ async function writeSeoFiles() {
   await writeFile(path.join(DIST, "robots.txt"), robotsTxt());
   await writeFile(path.join(DIST, "sitemap.xml"), sitemapXml(today));
   await writeFile(path.join(DIST, "llms.txt"), llmsTxt());
+  await writeFile(path.join(DIST, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

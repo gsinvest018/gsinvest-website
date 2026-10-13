@@ -78,3 +78,9 @@ test("favicons exist in every format browsers and crawlers look for", async ({ b
   await expect(page.locator('link[rel="icon"][sizes="192x192"]')).toHaveCount(1);
   await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute("href", "/apple-touch-icon.png");
 });
+
+test("IndexNow key file is served with the key as its content", async () => {
+  const { INDEXNOW_KEY } = await import("../build/seo.config.mjs");
+  expect(INDEXNOW_KEY).toMatch(/^[a-f0-9]{32}$/);
+  expect(readDist(`dist/${INDEXNOW_KEY}.txt`)).toBe(INDEXNOW_KEY);
+});

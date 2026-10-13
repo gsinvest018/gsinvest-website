@@ -3,6 +3,9 @@
 // (tests/seo.spec.ts checks this against the rendered page).
 export const SITE_URL = "https://gsinvest.com.tw";
 export const OG_IMAGE = { path: "/og-image.png", width: 1200, height: 630 };
+// IndexNow key (public by design): served at /<key>.txt so search engines can
+// confirm that submissions from build/indexnow.mjs come from this site.
+export const INDEXNOW_KEY = "94cf957a0fbb994335113d57a5e83fca";
 
 export const ORGANIZATION = {
   legalNameZh: "創世紀國際投資股份有限公司",

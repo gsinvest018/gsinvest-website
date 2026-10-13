@@ -65,3 +65,18 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  indexnow:
+    # Tell Bing and other IndexNow engines the pages changed. A failure here
+    # never affects the deployed site.
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Submit URLs to IndexNow
+        run: node build/indexnow.mjs
