@@ -64,9 +64,9 @@ PR 上執行步驟 1–4 與第 5 節的檢查，但不部署。
 ### 1.3 執行期行為
 
 - HTML 已含完整內容，移除 boot splash。
-- React 以 `createRoot` 取代預渲染內容（不用 hydrate，避免不一致警告）；兩者畫面相同。
+- 預渲染標記由 `ReactDOMServer.renderToString` 產生，React 以 `hydrateRoot` 直接接手（實作時從 `createRoot` 改為 hydrate：整段替換會重繪並把 LCP 推遲到約 6 秒）。
 - 語言由網址決定：`/` 為繁中、`/en/` 為英文。切換時更新畫面並以 `history.pushState` 改網址。
-- 擷取前移除 Three.js 的 `<canvas>`，HTML 中不含任何 WebGL 狀態。
+- 伺服器端渲染不執行 effect，HTML 中不含 Three.js 的 `<canvas>`。
 
 ### 1.4 需使用者確認的設定變更
 
@@ -120,10 +120,10 @@ PR 上執行步驟 1–4 與第 5 節的檢查，但不部署。
 
 | 項目 | 做法 |
 |---|---|
-| 圖片 | `sharp` 轉 AVIF、WebP，寬度 640/1024/1600；`<picture>` + `srcset` + `sizes`，標明 `width`/`height`，一律 `loading="lazy"`。桌機整頁模式以 CSS 將非當前頁的 `<picture>` 設為 `display:none`，因此預渲染 HTML 與 React 接手後都只在切到該頁時才下載；手機連續捲動則由原生 lazy loading 處理。`src` 保留在 HTML 中供爬蟲讀取。 |
-| JS | React、ReactDOM、Three.js 改為同網域 `dist/vendor/`；`app.js` 經 esbuild 壓縮。 |
+| 圖片 | `sharp` 轉 AVIF、WebP，寬度 480/800/1024（原圖約 1024px，不放大），另有 1024 寬 JPEG 後備；`<picture>` + `srcset` + `sizes`，標明 `width`/`height`，一律 `loading="lazy"`。桌機整頁模式以 CSS 將非當前頁的 `<picture>` 設為 `display:none`，因此預渲染 HTML 與 React 接手後都只在切到該頁時才下載；手機連續捲動則由原生 lazy loading 處理。`src` 保留在 HTML 中供爬蟲讀取。 |
+| JS | React、ReactDOM、Three.js 改為同網域 `dist/vendor/`；`app.js` 經 esbuild 壓縮。Three.js 不放在 HTML 中，於 `load` 後瀏覽器閒置時才動態載入。 |
 | Three.js | 首屏內容繪製後於 `requestIdleCallback` 初始化；手機 `devicePixelRatio` 上限 1.5、粒子數減半；非當前頁的場景暫停 render loop；`prefers-reduced-motion` 時不初始化，改顯示靜態圖。 |
-| 字型 | 只保留實際使用的字重（預估 18 → 約 8）。 |
+| 字型 | 只保留實際使用的字重（18 → 8，以 `build/font-audit.mjs` 盤點）。Google Fonts 請求加上 `text=`（網站所有用到的字元），每個字族只回傳一個小型子集，不再載入數十個 unicode-range 切片。 |
 | 移除 | Tweaks 面板與 `useTweaks` 相關程式碼；Intro「LOADING」開場動畫（改為內容淡入）；boot splash。 |
 
 目標（Lighthouse 手機模式）：

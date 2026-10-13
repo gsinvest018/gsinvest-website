@@ -11,14 +11,15 @@ export const LOCALES = [
   { key: "en", htmlLang: "en", urlPath: "/en/", file: "en/index.html" },
 ];
 
+const SERVER_RENDERER = "node_modules/react-dom/umd/react-dom-server-legacy.browser.production.min.js";
+
+// The markup must be ReactDOMServer output (not the live DOM's innerHTML) so
+// hydrateRoot can adopt it: React separates adjacent text nodes with comments.
 async function renderRoot(page, url) {
   await page.goto(url, { waitUntil: "load" });
   await page.waitForFunction(() => window.__appReady === true);
-  return page.evaluate(() => {
-    const root = document.getElementById("root").cloneNode(true);
-    root.querySelectorAll("canvas").forEach((el) => el.remove());
-    return root.innerHTML;
-  });
+  await page.addScriptTag({ path: SERVER_RENDERER });
+  return page.evaluate(() => ReactDOMServer.renderToString(React.createElement(window.__GSApp)));
 }
 
 function inject(shell, locale, rootHtml) {

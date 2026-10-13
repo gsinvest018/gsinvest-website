@@ -127,12 +127,14 @@ const I18N = {
       titleEn: "Our Space.",
       lead: "位於台中的辦公室，是我們交易、研發與思考的所在。一面落地窗收進城市夜景，一張桌、兩個螢幕——策略，就在這裡誕生。",
       items: [{
-        img: "/data/images/office_build.png",
+        img: "/data/images/office_build",
+        size: [1024, 956],
         label: "Future HQ · 示意圖",
         title: "未來總部規劃",
         desc: "規劃興建中的自有大樓——示意圖,非現址。"
       }, {
-        img: "/data/images/workspace.png",
+        img: "/data/images/workspace",
+        size: [1024, 1024],
         label: "The Desk",
         title: "交易與研發桌",
         desc: "雙螢幕、實盤環境，AI 與人協作的第一線。"
@@ -323,12 +325,14 @@ const I18N = {
       titleEn: "Our Space.",
       lead: "Our Taichung office is where we trade, build and think. A floor-to-ceiling window frames the city at night; one desk, two monitors — this is where strategy is born.",
       items: [{
-        img: "/data/images/office_build.png",
+        img: "/data/images/office_build",
+        size: [1024, 956],
         label: "Future HQ · Concept",
         title: "Future Headquarters",
         desc: "A planned building, shown as a concept rendering — not our current address."
       }, {
-        img: "/data/images/workspace.png",
+        img: "/data/images/workspace",
+        size: [1024, 1024],
         label: "The Desk",
         title: "Trading & Research",
         desc: "Dual monitors and a live-market setup — the front line of human-AI collaboration."
@@ -408,30 +412,51 @@ const {
   useRef,
   useState
 } = React;
-function useThreeReady() {
-  const [ready, setReady] = useState(() => typeof THREE !== "undefined");
-  useEffect(() => {
-    if (ready) return;
-    let id;
-    const mark = () => {
-      setReady(true);
-      if (id) clearInterval(id);
-    };
-    if (typeof THREE !== "undefined") {
-      mark();
-      return;
-    }
-    window.addEventListener("threeready", mark, {
-      once: true
+const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Phones and tablets get a lighter scene: lower pixel ratio, fewer particles.
+const COMPACT = window.matchMedia("(max-width: 1024px)").matches;
+const MAX_PIXEL_RATIO = COMPACT ? 1.5 : 2;
+const whenIdle = cb => window.requestIdleCallback ? window.requestIdleCallback(cb, {
+  timeout: 1500
+}) : setTimeout(cb, 200);
+
+// Three.js is not referenced from the HTML: it is fetched once the page has
+// loaded and the browser is idle, so it never competes with fonts or React.
+let threePromise = null;
+function loadThree() {
+  if (!threePromise) {
+    threePromise = new Promise((resolve, reject) => {
+      if (typeof THREE !== "undefined") return resolve();
+      const start = () => whenIdle(() => {
+        const script = document.createElement("script");
+        script.src = "/vendor/three.min.js";
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+      if (document.readyState === "complete") start();else window.addEventListener("load", start, {
+        once: true
+      });
     });
-    id = setInterval(() => {
-      if (typeof THREE !== "undefined") mark();
-    }, 120);
+  }
+  return threePromise;
+}
+
+// True once THREE has loaded and the browser is idle again, so WebGL setup
+// never competes with first paint. Stays false when reduced motion is requested.
+function useThreeReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (REDUCED_MOTION) return;
+    let cancelled = false;
+    loadThree().then(() => whenIdle(() => {
+      if (!cancelled) setReady(true);
+    }), () => {});
     return () => {
-      window.removeEventListener("threeready", mark);
-      if (id) clearInterval(id);
+      cancelled = true;
     };
-  }, [ready]);
+  }, []);
   return ready;
 }
 function ThreeHero({
@@ -453,7 +478,7 @@ function ThreeHero({
   }, [rotationSpeed]);
   useEffect(() => {
     const mount = mountRef.current;
-    if (!mount || typeof THREE === "undefined") return;
+    if (!mount || !threeReady) return;
     const width = mount.clientWidth;
     const height = mount.clientHeight;
     const scene = new THREE.Scene();
@@ -473,7 +498,7 @@ function ThreeHero({
       antialias: true,
       alpha: true
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     renderer.setSize(width, height);
     renderer.setClearColor(0x000000, 0);
     renderer.outputEncoding = THREE.sRGBEncoding;
@@ -551,7 +576,7 @@ function ThreeHero({
     ring3.rotation.x = Math.PI / 2;
     ring3.rotation.y = Math.PI / 5;
     group.add(ring3);
-    const particleCount = Math.floor(800 * particleDensity);
+    const particleCount = Math.floor((COMPACT ? 400 : 800) * particleDensity);
     const particlesGeom = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     const scales = new Float32Array(particleCount);
@@ -704,7 +729,7 @@ function ThreePillar({
   const threeReady = useThreeReady();
   useEffect(() => {
     const mount = mountRef.current;
-    if (!mount || typeof THREE === "undefined") return;
+    if (!mount || !threeReady) return;
     const width = mount.clientWidth;
     const height = mount.clientHeight;
     const scene = new THREE.Scene();
@@ -714,7 +739,7 @@ function ThreePillar({
       antialias: true,
       alpha: true
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     renderer.setSize(width, height);
     renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
@@ -1005,6 +1030,34 @@ function Team({
     className: "bio"
   }, m.bio))))));
 }
+// Must match IMAGE_WIDTHS in build/images.mjs.
+const IMAGE_WIDTHS = [480, 800, 1024];
+const srcset = (base, ext) => IMAGE_WIDTHS.map(w => `${base}-${w}.${ext} ${w}w`).join(", ");
+function ResponsiveImage({
+  base,
+  size,
+  alt,
+  sizes,
+  className
+}) {
+  return React.createElement("picture", null, React.createElement("source", {
+    type: "image/avif",
+    srcSet: srcset(base, "avif"),
+    sizes: sizes
+  }), React.createElement("source", {
+    type: "image/webp",
+    srcSet: srcset(base, "webp"),
+    sizes: sizes
+  }), React.createElement("img", {
+    className: className,
+    src: `${base}-${IMAGE_WIDTHS[IMAGE_WIDTHS.length - 1]}.jpg`,
+    alt: alt,
+    width: size[0],
+    height: size[1],
+    loading: "lazy",
+    decoding: "async"
+  }));
+}
 function Space({
   t
 }) {
@@ -1029,11 +1082,12 @@ function Space({
   }, t.space.items.map((it, i) => React.createElement("figure", {
     key: i,
     className: "space-fig"
-  }, React.createElement("div", {
-    className: "space-img",
-    style: {
-      backgroundImage: `url("${it.img}")`
-    }
+  }, React.createElement(ResponsiveImage, {
+    base: it.img,
+    size: it.size,
+    alt: `${it.title} — ${it.desc}`,
+    sizes: i === 0 ? "(max-width: 768px) 100vw, 40vw" : "(max-width: 768px) 100vw, 58vw",
+    className: "space-img"
   }), React.createElement("figcaption", {
     className: "space-cap"
   }, React.createElement("span", {
@@ -1493,6 +1547,15 @@ function App() {
     total: PAGES.length
   }));
 }
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(App, null));
+// Exposed for build/prerender.mjs, which server-renders it in a browser.
+window.__GSApp = App;
+
+// Prerendered pages are hydrated in place so the server markup is kept (no
+// repaint, no LCP reset); a plain shell falls back to a client render.
+const container = document.getElementById("root");
+if (container.hasAttribute("data-prerendered")) {
+  ReactDOM.hydrateRoot(container, React.createElement(App, null));
+} else {
+  ReactDOM.createRoot(container).render(React.createElement(App, null));
+}
 })();

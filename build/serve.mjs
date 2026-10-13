@@ -1,6 +1,8 @@
 // Minimal static file server for dist/ — shared by prerender, tests and Lighthouse.
+// Text responses are gzipped like on GitHub Pages, so Lighthouse sees realistic sizes.
 // Usage: node build/serve.mjs <dir> <port>
 import http from "node:http";
+import { gzipSync } from "node:zlib";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,11 +44,15 @@ export function startServer(dir, port = 0) {
       res.end("Not found");
       return;
     }
-    const body = await readFile(file);
-    res.writeHead(200, {
-      "content-type": TYPES[path.extname(file)] || "application/octet-stream",
-      "cache-control": "no-cache",
-    });
+    let body = await readFile(file);
+    const type = TYPES[path.extname(file)] || "application/octet-stream";
+    const headers = { "content-type": type, "cache-control": "no-cache" };
+    const compressible = /^(text\/|application\/(json|xml)|image\/svg)/.test(type);
+    if (compressible && /\bgzip\b/.test(req.headers["accept-encoding"] || "")) {
+      body = gzipSync(body);
+      headers["content-encoding"] = "gzip";
+    }
+    res.writeHead(200, headers);
     res.end(body);
   });
   return new Promise((resolve) => {

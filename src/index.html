@@ -6,10 +6,14 @@
 <title>GS 創世紀國際投資股份有限公司 · Genesis International Capital</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
+<!-- Weights trimmed to those in use; re-check with build/font-audit.mjs after style changes. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-<noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" /></noscript>
+<!-- build/build.mjs appends &text=<characters used on the site> to these, so Google
+     Fonts serves one small subset per family instead of dozens of unicode-range slices. -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700&amp;family=Noto+Sans+TC:wght@400;500&amp;display=swap" rel="stylesheet" media="print" onload="this.media='all'" data-subset-fonts />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400&amp;family=Inter:wght@400;500&amp;display=swap" rel="stylesheet" media="print" onload="this.media='all'" data-subset-fonts />
+<noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700&amp;family=Noto+Sans+TC:wght@400;500&amp;display=swap" rel="stylesheet" data-subset-fonts /><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400&amp;family=Inter:wght@400;500&amp;display=swap" rel="stylesheet" data-subset-fonts /></noscript>
 
 <style>
   :root {
@@ -109,6 +113,14 @@
   }
   /* 3D background fades in only once the (async) Three.js scene is ready */
   #three-bg.three-on { opacity: 1; }
+  /* No WebGL when reduced motion is requested: a static gold glow stands in. */
+  @media (prefers-reduced-motion: reduce) {
+    #three-bg {
+      opacity: 1;
+      transition: none;
+      background: radial-gradient(circle at 72% 48%, rgba(212,175,55,0.14) 0%, rgba(212,175,55,0.04) 28%, transparent 55%);
+    }
+  }
   /* Readability scrim that sits between the 3D bg and the page content.
      Darkens behind text; its character changes per page via body[data-page]. */
   #bg-scrim {
@@ -957,12 +969,16 @@
     transition: opacity 0.6s;
   }
   .space-fig:hover::after { opacity: 1; }
+  .space-fig picture { display: block; width: 100%; height: 100%; }
   .space-img {
+    display: block;
     width: 100%; height: 100%;
-    background-size: cover;
-    background-position: center;
+    object-fit: cover;
+    object-position: center;
     transition: transform 1.4s cubic-bezier(.16,.84,.3,1);
   }
+  /* Keep lazy images on hidden pages from loading until their page is shown. */
+  .page:not(.active) .space-fig picture { display: none; }
   .space-fig:hover .space-img { transform: scale(1.06); }
   .space-cap {
     position: absolute;
@@ -1490,13 +1506,6 @@
 <!-- React + ReactDOM (production UMD builds, self-hosted under /vendor) -->
 <script defer src="/vendor/react.production.min.js"></script>
 <script defer src="/vendor/react-dom.production.min.js"></script>
-
-<!-- Three.js r128 UMD (exposes global THREE) — loaded async so it never blocks
-     first paint. ThreeHero waits for the 'threeready' signal, then fades the
-     3D scene in; the static page is fully usable before 3D arrives. -->
-<script>window.__threeReady = false;</script>
-<script src="/vendor/three.min.js" async
-        onload="window.__threeReady = true; window.dispatchEvent(new Event('threeready'));"></script>
 
 <!-- Application bundle (minified from src/app.prod.js by build/build.mjs) -->
 <script defer src="/app.js"></script>
