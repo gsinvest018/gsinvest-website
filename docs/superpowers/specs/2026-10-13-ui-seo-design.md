@@ -122,7 +122,7 @@ PR 上執行步驟 1–4 與第 5 節的檢查，但不部署。
 |---|---|
 | 圖片 | `sharp` 轉 AVIF、WebP，寬度 480/800/1024（原圖約 1024px，不放大），另有 1024 寬 JPEG 後備；`<picture>` + `srcset` + `sizes`，標明 `width`/`height`，一律 `loading="lazy"`。桌機整頁模式以 CSS 將非當前頁的 `<picture>` 設為 `display:none`，因此預渲染 HTML 與 React 接手後都只在切到該頁時才下載；手機連續捲動則由原生 lazy loading 處理。`src` 保留在 HTML 中供爬蟲讀取。 |
 | JS | React、ReactDOM、Three.js 改為同網域 `dist/vendor/`；`app.js` 經 esbuild 壓縮。Three.js 不放在 HTML 中，於 `load` 後瀏覽器閒置時才動態載入。 |
-| Three.js | 首屏內容繪製後於 `requestIdleCallback` 初始化；手機 `devicePixelRatio` 上限 1.5、粒子數減半；非當前頁的場景暫停 render loop；`prefers-reduced-motion` 時不初始化，改顯示靜態圖。 |
+| Three.js | 首屏內容繪製後於 `requestIdleCallback` 初始化；手機 `devicePixelRatio` 上限 1.5、粒子數減半；非當前頁的場景暫停 render loop；`prefers-reduced-motion` 時，或瀏覽器只能以軟體算繪 WebGL（`failIfMajorPerformanceCaveat` 偵測，例如沒有 GPU）時，完全不載入 Three.js，改顯示靜態金色光暈。 |
 | 字型 | 只保留實際使用的字重（18 → 8，以 `build/font-audit.mjs` 盤點）。Google Fonts 請求加上 `text=`（網站所有用到的字元），每個字族只回傳一個小型子集，不再載入數十個 unicode-range 切片。 |
 | 移除 | Tweaks 面板與 `useTweaks` 相關程式碼；Intro「LOADING」開場動畫（改為內容淡入）；boot splash。 |
 
